@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script type="module">
+      class MyPromise extends Promise {
+        abortControler;
+        isCanceled = false;
+        constructor(executor, abortControler = new AbortController()) {
+          super((resolve, reject) => {
+            executor(resolve, reject, abortControler.signal);
+          });
+          this.abortControler = abortControler;
+        }
+
+        static delay(ms) {
+          return new Promise((resolve) => {
+            setTimeout(() => resolve(), ms);
+          });
+        }
+
+        then(onFulfill, onReject) {
+          return new MyPromise((resolve, reject, signal) => {
+            const onSettled = (status, value, callback) => {
+              if (signal.aborted) {
+                throw new Error(signal.reason);
+              }
+              if ("function" === typeof callback) {
+                value = callback(value);
+                if (value instanceof MyPromise) {
+                  Object.assign(signal, value.abortController);
+                }
+                return resolve(value);
+              }
+              "resolved" === status && resolve(value);
+              "rejected" === status && reject(value);
+            };
+            super.then(
+              (value) => onSettled("resolved", value, onFulfill),
+              (reason) => onSettled("rejected", reason, onReject)
+            );
+          }, this.abortControler);
+        }
+
+        cancel() {
+          this.abortControler.abort("canceled");
+        }
+
+        suppressUnhandledRejections() {
+          return new MyPromise((resolve, reject, signal) => {
+            reject();
+          }, this.abortControler);
+        }
+      }
+
+      const promise = new MyPromise((resolve, reject) => resolve("test"))
+        .then((res) => {
+          console.log(res);
+          return res;
+        })
+        .then(console.log)
+        .catch(console.log);
+
+      promise.cancel();
+    </script>
+  </head>
+  <body></body>
+</html>
