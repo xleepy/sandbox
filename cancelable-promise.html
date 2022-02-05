@@ -2,9 +2,11 @@
 <html>
   <head>
     <script type="module">
+      // Inspired by https://github.com/dondevi/promise-abortable/blob/4521a9b9ce63bb12bdab03cf4826322d7f2bad8d/src/index.js
+
       class MyPromise extends Promise {
         abortControler;
-        isCanceled = false;
+
         constructor(executor, abortControler = new AbortController()) {
           super((resolve, reject) => {
             executor(resolve, reject, abortControler.signal);
@@ -13,52 +15,61 @@
         }
 
         static delay(ms) {
-          return new Promise((resolve) => {
+          return new Promise(resolve => {
             setTimeout(() => resolve(), ms);
           });
         }
 
         then(onFulfill, onReject) {
           return new MyPromise((resolve, reject, signal) => {
-            const onSettled = (status, value, callback) => {
-              if (signal.aborted) {
-                throw new Error(signal.reason);
+            Promise.resolve().then(() => {
+              const isCanceled = signal.aborted;
+              if (isCanceled) {
+                reject('canceled');
               }
-              if ("function" === typeof callback) {
-                value = callback(value);
-                if (value instanceof MyPromise) {
-                  Object.assign(signal, value.abortController);
+              const onSettled = (status, value, callback) => {
+                if ('function' === typeof callback) {
+                  value = callback(value);
+                  if (value instanceof MyPromise) {
+                    Object.assign(signal, value.abortController);
+                  }
+                  return resolve(value);
                 }
-                return resolve(value);
-              }
-              "resolved" === status && resolve(value);
-              "rejected" === status && reject(value);
-            };
-            super.then(
-              (value) => onSettled("resolved", value, onFulfill),
-              (reason) => onSettled("rejected", reason, onReject)
-            );
+                'resolved' === status && resolve(value);
+                'rejected' === status && reject(value);
+              };
+              super.then(
+                value => (isCanceled ? null : onSettled('resolved', value, onFulfill)),
+                reason => onSettled('rejected', reason, onReject)
+              );
+            });
           }, this.abortControler);
         }
 
         cancel() {
-          this.abortControler.abort("canceled");
+          this.abortControler.abort('canceled');
         }
 
+        // TODO: fix
+        // Do something like: http://bluebirdjs.com/docs/api/suppressunhandledrejections.html
         suppressUnhandledRejections() {
-          return new MyPromise((resolve, reject, signal) => {
-            reject();
-          }, this.abortControler);
+          // return this.catch(() => {});
+          return this;
         }
       }
 
-      const promise = new MyPromise((resolve, reject) => resolve("test"))
-        .then((res) => {
-          console.log(res);
-          return res;
+      document.body.innerText = 'started';
+      const promise = new MyPromise((resolve, reject) => resolve('promise resolved'))
+        .then(res => {
+          console.log('here');
+          document.body.innerText = 'fulfilled ' + res;
+          return res + 'heh';
         })
-        .then(console.log)
-        .catch(console.log);
+        .suppressUnhandledRejections()
+        .then(res => {
+          document.body.innerText = 'continued in chain';
+        })
+        .catch(err => console.log(err));
 
       promise.cancel();
     </script>
