@@ -4,6 +4,12 @@
     <script type="module">
       // Inspired by https://github.com/dondevi/promise-abortable/blob/4521a9b9ce63bb12bdab03cf4826322d7f2bad8d/src/index.js
 
+      function appendResultToDom(result) {
+        const span = document.createElement('p');
+        span.innerText = result;
+        document.body.appendChild(span);
+      }
+
       class MyPromise extends Promise {
         abortControler;
 
@@ -20,30 +26,31 @@
           });
         }
 
+        #chainPromise(executor) {
+          return new MyPromise(executor, this.abortControler);
+        }
+
         then(onFulfill, onReject) {
-          return new MyPromise((resolve, reject, signal) => {
+          return this.#chainPromise((resolve, reject, signal) => {
             Promise.resolve().then(() => {
               const isCanceled = signal.aborted;
               if (isCanceled) {
-                reject('canceled');
+                reject(new Error('Canceled'));
               }
               const onSettled = (status, value, callback) => {
+                let callbackValue = value;
                 if ('function' === typeof callback) {
-                  value = callback(value);
-                  if (value instanceof MyPromise) {
-                    Object.assign(signal, value.abortController);
-                  }
-                  return resolve(value);
+                  callbackValue = callback(value);
                 }
-                'resolved' === status && resolve(value);
-                'rejected' === status && reject(value);
+                'resolved' === status && resolve(callbackValue);
+                'rejected' === status && reject(callbackValue);
               };
               super.then(
-                value => (isCanceled ? null : onSettled('resolved', value, onFulfill)),
+                isCanceled ? null : value => onSettled('resolved', value, onFulfill),
                 reason => onSettled('rejected', reason, onReject)
               );
             });
-          }, this.abortControler);
+          });
         }
 
         cancel() {
@@ -62,14 +69,15 @@
       const promise = new MyPromise((resolve, reject) => resolve('promise resolved'))
         .then(res => {
           console.log('here');
-          document.body.innerText = 'fulfilled ' + res;
+          appendResultToDom('resolved promise');
           return res + 'heh';
         })
         .suppressUnhandledRejections()
         .then(res => {
-          document.body.innerText = 'continued in chain';
+          console.log('in last res');
+          appendResultToDom('continued in chain');
         })
-        .catch(err => console.log(err));
+        .catch(err => appendResultToDom(err.toString()));
 
       promise.cancel();
     </script>
