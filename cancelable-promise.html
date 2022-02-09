@@ -32,10 +32,13 @@
 
         then(onFulfill, onReject) {
           return this.#chainPromise((resolve, reject, signal) => {
-            Promise.resolve().then(() => {
+            // Place promise in macrotask queue to get event result
+            // TODO: investigate more how this can be improved
+            // TODO: Fix Uncaught (in promise) canceled
+            const timeoutId = setTimeout(() => {
               const isCanceled = signal.aborted;
               if (isCanceled) {
-                reject(new Error('Canceled'));
+                reject('canceled');
               }
               const onSettled = (status, value, callback) => {
                 let callbackValue = value;
@@ -44,12 +47,13 @@
                 }
                 'resolved' === status && resolve(callbackValue);
                 'rejected' === status && reject(callbackValue);
+                clearTimeout(timeoutId);
               };
               super.then(
                 isCanceled ? null : value => onSettled('resolved', value, onFulfill),
                 reason => onSettled('rejected', reason, onReject)
               );
-            });
+            }, 0);
           });
         }
 
@@ -65,19 +69,24 @@
         }
       }
 
-      document.body.innerText = 'started';
-      const promise = new MyPromise((resolve, reject) => resolve('promise resolved'))
+      window.Promise = MyPromise;
+
+      appendResultToDom('started');
+      const promise = new Promise((resolve, reject) =>
+        setTimeout(() => resolve('promise resolved'), 200)
+      )
         .then(res => {
-          console.log('here');
           appendResultToDom('resolved promise');
+          // throw new Error('tst');
           return res + 'heh';
         })
-        .suppressUnhandledRejections()
+        // .suppressUnhandledRejections()
         .then(res => {
-          console.log('in last res');
           appendResultToDom('continued in chain');
         })
         .catch(err => appendResultToDom(err.toString()));
+
+      console.log(promise);
 
       promise.cancel();
     </script>
