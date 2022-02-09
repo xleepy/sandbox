@@ -2,93 +2,64 @@
 <html>
   <head>
     <script type="module">
-      // Inspired by https://github.com/dondevi/promise-abortable/blob/4521a9b9ce63bb12bdab03cf4826322d7f2bad8d/src/index.js
-
       function appendResultToDom(result) {
-        const span = document.createElement('p');
+        const span = document.createElement("p");
         span.innerText = result;
         document.body.appendChild(span);
       }
 
-      class MyPromise extends Promise {
-        abortControler;
+      // reference: https://reactjs.org/blog/2015/12/16/ismounted-antipattern.html
+      const makeCancelable = (promise) => {
+        let isCanceled = false;
+        let innerReject;
+        const abortController = new AbortController();
 
-        constructor(executor, abortControler = new AbortController()) {
-          super((resolve, reject) => {
-            executor(resolve, reject, abortControler.signal);
+        const handleAbort = () => {
+          isCanceled = true;
+          innerReject({ isCanceled });
+        };
+
+        abortController.signal.addEventListener("abort", handleAbort);
+
+        const wrappedPromise = new Promise((resolve, reject) => {
+          innerReject = reject;
+          promise.then(resolve, reject).finally(() => {
+            abortController.signal.removeEventListener("abort", handleAbort);
           });
-          this.abortControler = abortControler;
-        }
+        });
 
-        static delay(ms) {
-          return new Promise(resolve => {
-            setTimeout(() => resolve(), ms);
-          });
-        }
+        return {
+          promise: wrappedPromise,
+          cancel: () => {
+            abortController.abort();
+          },
+        };
+      };
 
-        #chainPromise(executor) {
-          return new MyPromise(executor, this.abortControler);
-        }
+      appendResultToDom("started");
 
-        then(onFulfill, onReject) {
-          return this.#chainPromise((resolve, reject, signal) => {
-            // Place promise in macrotask queue to get event result
-            // TODO: investigate more how this can be improved
-            // TODO: Fix Uncaught (in promise) canceled
-            const timeoutId = setTimeout(() => {
-              const isCanceled = signal.aborted;
-              if (isCanceled) {
-                reject('canceled');
-              }
-              const onSettled = (status, value, callback) => {
-                let callbackValue = value;
-                if ('function' === typeof callback) {
-                  callbackValue = callback(value);
-                }
-                'resolved' === status && resolve(callbackValue);
-                'rejected' === status && reject(callbackValue);
-                clearTimeout(timeoutId);
-              };
-              super.then(
-                isCanceled ? null : value => onSettled('resolved', value, onFulfill),
-                reason => onSettled('rejected', reason, onReject)
-              );
-            }, 0);
-          });
-        }
+      // create cancellable promise and then handle it
+      const { promise, cancel } = makeCancelable(
+        new Promise((resolve, reject) =>
+          setTimeout(() => resolve("promise resolved"), 200)
+        )
+      );
 
-        cancel() {
-          this.abortControler.abort('canceled');
-        }
-
-        // TODO: fix
-        // Do something like: http://bluebirdjs.com/docs/api/suppressunhandledrejections.html
-        suppressUnhandledRejections() {
-          // return this.catch(() => {});
-          return this;
-        }
-      }
-
-      window.Promise = MyPromise;
-
-      appendResultToDom('started');
-      const promise = new Promise((resolve, reject) =>
-        setTimeout(() => resolve('promise resolved'), 200)
-      )
-        .then(res => {
-          appendResultToDom('resolved promise');
+      promise
+        .then((res) => {
+          appendResultToDom("resolved promise");
           // throw new Error('tst');
-          return res + 'heh';
+          return res + "heh";
         })
         // .suppressUnhandledRejections()
-        .then(res => {
-          appendResultToDom('continued in chain');
+        .then((res) => {
+          appendResultToDom("continued in chain");
         })
-        .catch(err => appendResultToDom(err.toString()));
+        .catch((err) => appendResultToDom(`canceled: ${err.isCanceled}`));
 
       console.log(promise);
 
-      promise.cancel();
+      cancel();
     </script>
   </head>
   <body></body>
