@@ -23,9 +23,9 @@
 
         const wrappedPromise = new Promise((resolve, reject) => {
           innerReject = reject;
-          promise.then(resolve, reject).finally(() => {
-            abortController.signal.removeEventListener("abort", handleAbort);
-          });
+          promise.then(resolve, reject);
+        }).finally(() => {
+          abortController.signal.removeEventListener("abort", handleAbort);
         });
 
         return {
@@ -55,7 +55,8 @@
         .then((res) => {
           appendResultToDom("continued in chain");
         })
-        .catch((err) => appendResultToDom(`canceled: ${err.isCanceled}`));
+        .catch((err) => appendResultToDom(`canceled: ${err.isCanceled}`))
+        .finally(() => appendResultToDom("finally"));
 
       console.log(promise);
 
