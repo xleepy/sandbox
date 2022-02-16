@@ -23,12 +23,23 @@
 
         const wrappedPromise = new Promise((resolve, reject) => {
           innerReject = reject;
-          promise.then(resolve, reject);
+          const settleValue = (callback, value) => {
+            return isCanceled
+              ? Promise.reject({ isCanceled })
+              : callback(value);
+          };
+          promise
+            .then(
+              (value) => settleValue(resolve, value),
+              (reason) => settleValue(reject, reason)
+            )
+            .catch(console.warn);
         }).finally(() => {
           abortController.signal.removeEventListener("abort", handleAbort);
         });
 
         return {
+          signal: abortController.signal,
           promise: wrappedPromise,
           cancel: () => {
             abortController.abort();
@@ -38,12 +49,12 @@
 
       appendResultToDom("started");
 
-      // create cancellable promise and then handle it
-      const { promise, cancel } = makeCancelable(
-        new Promise((resolve, reject) =>
-          setTimeout(() => resolve("promise resolved"), 200)
-        )
+      const longPromise = new Promise((resolve, reject) =>
+        setTimeout(() => resolve("hey"), 1000)
       );
+
+      // create cancellable promise and then handle it
+      const { promise, cancel, signal } = makeCancelable(longPromise);
 
       promise
         .then((res) => {
