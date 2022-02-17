@@ -3,13 +3,13 @@
   <head>
     <script type="module">
       function appendResultToDom(result) {
-        const span = document.createElement("p");
+        const span = document.createElement('p');
         span.innerText = result;
         document.body.appendChild(span);
       }
 
       // reference: https://reactjs.org/blog/2015/12/16/ismounted-antipattern.html
-      const makeCancelable = (promise) => {
+      const makeCancelable = promise => {
         let isCanceled = false;
         let innerReject;
         const abortController = new AbortController();
@@ -19,23 +19,14 @@
           innerReject({ isCanceled });
         };
 
-        abortController.signal.addEventListener("abort", handleAbort);
+        abortController.signal.addEventListener('abort', handleAbort);
 
         const wrappedPromise = new Promise((resolve, reject) => {
           innerReject = reject;
-          const settleValue = (callback, value) => {
-            return isCanceled
-              ? Promise.reject({ isCanceled })
-              : callback(value);
-          };
-          promise
-            .then(
-              (value) => settleValue(resolve, value),
-              (reason) => settleValue(reject, reason)
-            )
-            .catch(console.warn);
+          // if wrapper rejected we don't care anymore about nested promise
+          promise.then(resolve, reject);
         }).finally(() => {
-          abortController.signal.removeEventListener("abort", handleAbort);
+          abortController.signal.removeEventListener('abort', handleAbort);
         });
 
         return {
@@ -47,27 +38,25 @@
         };
       };
 
-      appendResultToDom("started");
+      appendResultToDom('started');
 
-      const longPromise = new Promise((resolve, reject) =>
-        setTimeout(() => resolve("hey"), 1000)
-      );
+      const longPromise = new Promise((resolve, reject) => setTimeout(() => resolve('hey'), 1000));
 
       // create cancellable promise and then handle it
       const { promise, cancel, signal } = makeCancelable(longPromise);
 
       promise
-        .then((res) => {
-          appendResultToDom("resolved promise");
+        .then(res => {
+          appendResultToDom('resolved promise');
           // throw new Error('tst');
-          return res + "heh";
+          return res + 'heh';
         })
         // .suppressUnhandledRejections()
-        .then((res) => {
-          appendResultToDom("continued in chain");
+        .then(res => {
+          appendResultToDom('continued in chain');
         })
-        .catch((err) => appendResultToDom(`canceled: ${err.isCanceled}`))
-        .finally(() => appendResultToDom("finally"));
+        .catch(err => appendResultToDom(`canceled: ${err.isCanceled}`))
+        .finally(() => appendResultToDom('finally'));
 
       console.log(promise);
 
